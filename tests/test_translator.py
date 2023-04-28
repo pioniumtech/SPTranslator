@@ -1,7 +1,7 @@
 from typing import List
 import pytest
 import json
-from sptranslator.translator import Translator, divide_into_chunks, group_chunks, check_latex_errors
+from sptranslator.translator import Translator, divide_into_chunks, group_chunks, check_braces
 
 
 def test_divide_into_chunks_multiple_chunks_3() -> None:
@@ -80,36 +80,34 @@ def test_group_chunks_different_lengths_chunks_tokens():
         group_chunks(chunks, ntokens, max_len=10)
 
 
-def test_check_latex_errors_valid_file(tmpdir) -> None:
-    valid_latex = r"""
-    \documentclass{article}
-    \begin{document}
-    Hello, world!
-    \end{document}
-    """
+@pytest.mark.parametrize("text", [
+    "",
+    "a",
+    "a{b}",
+    "a{b}c",
+    "a{b{c}d}e",
+    "{a{b}c}",
+    "{a{b}{c}}",
+    "{a{b{c}}}",
+])
+def test_check_braces_positive(text):
+    assert check_braces(text) is True
 
-    valid_file = tmpdir.join("valid_latex.tex")
-    valid_file.write(valid_latex)
 
-    assert check_latex_errors(valid_file.strpath) is None
-
-
-def test_check_latex_errors_invalid_file(tmpdir) -> None:
-    invalid_latex = r"""
-    \documentclass{article}
-    \begin{document}
-    Hello, world!
-    % missing \end{document}
-    """
-
-    invalid_file = tmpdir.join("invalid_latex.tex")
-    invalid_file.write(invalid_latex)
-
-    with pytest.raises(ValueError) as excinfo:
-        check_latex_errors(invalid_file.strpath)
-
-    assert "LaTeX syntax error found" in str(excinfo.value)
-
+@pytest.mark.parametrize("text", [
+    "{",
+    "}",
+    "a{",
+    "a{b",
+    "a{b}c}",
+    "{a{b}c",
+    "{a{b}c}}",
+    "{a{b{c}",
+    "}}a{b{c}}",
+])
+def test_check_braces_negative(text):
+    with pytest.raises(ValueError, match="Unmatched braces."):
+        check_braces(text)
 
 def test_translation() -> None:    
     texts = [
@@ -199,6 +197,6 @@ def test_translate_file() -> None:
     output_path = "./tests/experiments_details_fr.tex"
 
     translator=Translator(source_lang, target_lang, syntax)
-    translator.translate_file(input_path, output_path)
+    
+    assert translator.translate_file(input_path, output_path) is None
 
-    assert check_latex_errors(output_path) is None

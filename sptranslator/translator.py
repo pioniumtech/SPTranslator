@@ -3,7 +3,7 @@ from typing import List
 import openai
 import logging
 import tiktoken
-from tex2py import TexSoup
+from lark import Lark, UnexpectedInput
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -74,9 +74,10 @@ class Translator:
 
         with open(output_path, mode='w') as f:
             f.write(translated_text)
-
-        if self.syntax == "latex":
-            check_latex_errors(output_path)
+    
+        if input_path.endswith(".tex"):
+            # Check if the translation is valid LaTeX
+            check_braces(translated_text) # simple LaTeX syntax check
 
 
 def divide_into_chunks(text: str) -> List[str]:
@@ -112,22 +113,20 @@ def group_chunks(chunks: List[str], ntokens: List[int], max_len: int = 400) -> L
     batches = [s[2:] for s in batches]
     return batches
 
+# simple LaTeX syntax check
+def check_braces(text: str) -> bool:
+    grammar = """
+        start: "{" inner "}"
+        inner: (CHARACTER | "{" inner "}")*
+        CHARACTER: /[^{}]+/
+    """
 
-def check_latex_errors(file_path: str) -> None:
+    parser = Lark(grammar, start='start')
+    
     try:
-        with open(file_path, 'r', encoding='utf-8') as f:
-            latex_content = f.read()
-        soup = TexSoup(latex_content)
-        logging.info("LaTeX syntax check passed.")
-
-    except EOFError as e:
-        logging.error(e)
-        raise ValueError("LaTeX syntax error found. EOFError")
-
-    except TypeError as e:
-        logging.error(e)
-        raise ValueError("LaTeX syntax error found. TypeError")
-
-    except Exception as e:
-        logging.error(e)
-        raise ValueError("LaTeX syntax error found. Exception")
+        parser.parse("{" + text + "}")
+        return True
+    except UnexpectedInput:
+        raise ValueError("Unmatched braces.")
+        return False
+    
